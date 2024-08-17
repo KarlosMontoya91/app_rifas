@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tablero de Rifas</title>
+    
+    <!-- Bootstrap -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <style>
+        body {
+            background-color: #f4f4f4;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(10, 50px);
+            grid-gap: 10px;
+            justify-content: center;
+        }
+
+        .cell {
+            width: 50px;
+            height: 50px;
+            background-color: #ddd;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 18px;
+            cursor: pointer;
+            border: 1px solid #aaa;
+        }
+
+        .cell.occupied {
+            background-color: #ffa500;
+            color: transparent; /* Hacemos el texto invisible */
+            position: relative;
+        }
+
+        .cell.occupied:hover::after {
+            content: attr(data-name);
+            position: absolute;
+            background-color: #333;
+            color: #fff;
+            padding: 5px;
+            border-radius: 5px;
+            top: -35px;
+            left: 50%;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            font-size: 14px;
+            z-index: 10;
+            opacity: 1;
+            pointer-events: none;
+        }
+
+        #name-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+    </style>
+</head>
+<body>
+
+<div class="container text-center">
+    <div class="mb-4 p-3 border rounded bg-white">
+        <h2>Total Recaudado: $<span id="total-amount">0</span> / $5000</h2>
+    </div>
+
+    <div class="board mb-4">
+        <!-- Generamos 100 casillas numeradas -->
+        <script>
+            for (let i = 1; i <= 100; i++) {
+                document.write(`<div class="cell" data-number="${i}">${i}</div>`);
+            }
+        </script>
+    </div>
+
+    <!-- Lista de nombres registrados -->
+    <div class="mb-4">
+        <h4>Lista de Nombres Registrados:</h4>
+        <ul id="name-list" class="list-group">
+            <!-- Aquí se irán agregando los nombres -->
+        </ul>
+    </div>
+</div>
+
+<!-- Modal para ingresar nombre -->
+<div class="modal fade" id="modal" tabindex="-1" aria-labelledby="modalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Elige el número <span id="selected-number"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="name-input" class="form-control" placeholder="Ingresa tu nombre">
+            </div>
+            <div class="modal-footer">
+                <button id="submit-name" class="btn btn-primary">Aceptar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para casilla ocupada -->
+<div class="modal fade" id="occupied-modal" tabindex="-1" aria-labelledby="occupiedModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Este número ya está ocupado por <span id="occupied-name"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-footer">
+                <button id="accept-occupied" class="btn btn-secondary" data-bs-dismiss="modal">Aceptar</button>
+                <button id="delete-occupied" class="btn btn-danger">Eliminar nombre</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const cells = document.querySelectorAll('.cell');
+    const modal = new bootstrap.Modal(document.getElementById('modal'));
+    const occupiedModal = new bootstrap.Modal(document.getElementById('occupied-modal'));
+    const selectedNumberElement = document.getElementById('selected-number');
+    const occupiedNameElement = document.getElementById('occupied-name');
+    const nameInput = document.getElementById('name-input');
+    const totalAmountElement = document.getElementById('total-amount');
+    const nameList = document.getElementById('name-list'); // Lista de nombres
+    let selectedCell;
+
+    let totalAmount = 0;
+
+    // Función para actualizar el total recaudado
+    const updateTotalAmount = () => {
+        totalAmount = document.querySelectorAll('.cell.occupied').length * 50;
+        totalAmountElement.textContent = totalAmount;
+    };
+
+    // Guardar el estado de las casillas en el Local Storage
+    const saveToLocalStorage = () => {
+        const cellData = [];
+        cells.forEach(cell => {
+            if (cell.classList.contains('occupied')) {
+                cellData.push({
+                    number: cell.getAttribute('data-number'),
+                    name: cell.getAttribute('data-name')
+                });
+            }
+        });
+        localStorage.setItem('raffleBoard', JSON.stringify(cellData));
+    };
+
+    // Cargar el estado de las casillas desde el Local Storage
+    const loadFromLocalStorage = () => {
+        const cellData = JSON.parse(localStorage.getItem('raffleBoard')) || [];
+        cellData.forEach(data => {
+            const cell = document.querySelector(`.cell[data-number="${data.number}"]`);
+            if (cell) {
+                cell.classList.add('occupied');
+                cell.setAttribute('data-name', data.name);
+                cell.textContent = "";  // Mantenemos la celda sin texto
+                addNameToList(data.number, data.name); // Agregamos el nombre a la lista
+            }
+        });
+        updateTotalAmount(); // Actualizamos el total recaudado
+    };
+
+    // Función para agregar un nombre a la lista
+    const addNameToList = (number, name) => {
+        const listItem = document.createElement('li');
+        listItem.className = "list-group-item"; // Añadimos la clase de Bootstrap para los elementos de lista
+        listItem.textContent = `Número ${number}: ${name}`;
+        nameList.appendChild(listItem);
+        sortNameList(); // Ordenamos la lista después de agregar el nuevo nombre
+    };
+
+    // Función para ordenar la lista de nombres
+    const sortNameList = () => {
+        const items = Array.from(nameList.querySelectorAll('li'));
+        items.sort((a, b) => {
+            const numberA = parseInt(a.textContent.split(' ')[1], 10);
+            const numberB = parseInt(b.textContent.split(' ')[1], 10);
+            return numberA - numberB;
+        });
+        nameList.innerHTML = ''; // Limpiamos la lista
+        items.forEach(item => nameList.appendChild(item)); // Añadimos los elementos ordenados
+    };
+
+    // Abrir modal al hacer clic en una celda
+    cells.forEach(cell => {
+        cell.addEventListener('click', () => {
+            if (cell.classList.contains('occupied')) {
+                // Si la celda ya está ocupada, mostramos el modal correspondiente
+                occupiedNameElement.textContent = cell.getAttribute('data-name');
+                selectedCell = cell;
+                occupiedModal.show();
+            } else {
+                selectedNumberElement.textContent = cell.getAttribute('data-number');
+                selectedCell = cell;
+                modal.show();
+            }
+        });
+    });
+
+    // Registrar nombre en la celda seleccionada
+    document.getElementById('submit-name').addEventListener('click', () => {
+        const name = nameInput.value.trim();
+        if (name) {
+            const number = selectedCell.getAttribute('data-number');
+            selectedCell.classList.add('occupied');
+            selectedCell.setAttribute('data-name', name);  // Asignamos el nombre al atributo data-name
+            selectedCell.textContent = "";  // No mostramos el nombre en la celda
+            modal.hide();
+            nameInput.value = '';
+            addNameToList(number, name); // Agregamos el nombre a la lista
+            updateTotalAmount(); // Actualizamos el total recaudado
+            saveToLocalStorage(); // Guardamos en el Local Storage
+        } else {
+            alert('Por favor, ingresa un nombre.');
+        }
+    });
+
+    // Eliminar nombre de la casilla ocupada
+    document.getElementById('delete-occupied').addEventListener('click', () => {
+        const number = selectedCell.getAttribute('data-number');
+        selectedCell.classList.remove('occupied');
+        selectedCell.removeAttribute('data-name');
+        selectedCell.textContent = number;
+        occupiedModal.hide();
+        updateTotalAmount(); // Actualizamos el total recaudado
+        nameList.innerHTML = ''; // Limpiamos la lista antes de regenerarla
+        saveToLocalStorage(); // Guardamos en el Local Storage
+        loadFromLocalStorage(); // Recargamos el estado desde el Local Storage para que la lista esté actualizada
+    });
+
+    // Cargar el estado inicial desde el Local Storage
+    loadFromLocalStorage();
+});
+
+</script>
+
+</body>
+</html>
